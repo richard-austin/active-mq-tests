@@ -2,16 +2,7 @@ package org.example;
 
 import org.apache.activemq.ActiveMQConnectionFactory;
 
-import javax.jms.Connection;
-import javax.jms.DeliveryMode;
-import javax.jms.Destination;
-import javax.jms.ExceptionListener;
-import javax.jms.JMSException;
-import javax.jms.Message;
-import javax.jms.MessageConsumer;
-import javax.jms.MessageProducer;
-import javax.jms.Session;
-import javax.jms.TextMessage;
+import javax.jms.*;
 
 /**
  * Hello world!
@@ -20,32 +11,32 @@ public class App {
 
     public static void main(String[] args) throws Exception {
         thread(new HelloWorldProducer(), false);
-        thread(new HelloWorldProducer(), false);
+        // thread(new HelloWorldProducer(), false);
         thread(new HelloWorldConsumer(), false);
         Thread.sleep(1000);
-        thread(new HelloWorldConsumer(), false);
-        thread(new HelloWorldProducer(), false);
-        thread(new HelloWorldConsumer(), false);
-        thread(new HelloWorldProducer(), false);
+        // thread(new HelloWorldConsumer(), false);
+        // hread(new HelloWorldProducer(), false);
+        // thread(new HelloWorldConsumer(), false);
+        // hread(new HelloWorldProducer(), false);
         Thread.sleep(1000);
-        thread(new HelloWorldConsumer(), false);
-        thread(new HelloWorldProducer(), false);
-        thread(new HelloWorldConsumer(), false);
-        thread(new HelloWorldConsumer(), false);
-        thread(new HelloWorldProducer(), false);
-        thread(new HelloWorldProducer(), false);
+        // thread(new HelloWorldConsumer(), false);
+        // hread(new HelloWorldProducer(), false);
+        // thread(new HelloWorldConsumer(), false);
+        // thread(new HelloWorldConsumer(), false);
+        // hread(new HelloWorldProducer(), false);
+        // hread(new HelloWorldProducer(), false);
         Thread.sleep(1000);
-        thread(new HelloWorldProducer(), false);
-        thread(new HelloWorldConsumer(), false);
-        thread(new HelloWorldConsumer(), false);
-        thread(new HelloWorldProducer(), false);
-        thread(new HelloWorldConsumer(), false);
-        thread(new HelloWorldProducer(), false);
-        thread(new HelloWorldConsumer(), false);
-        thread(new HelloWorldProducer(), false);
-        thread(new HelloWorldConsumer(), false);
-        thread(new HelloWorldConsumer(), false);
-        thread(new HelloWorldProducer(), false);
+        // hread(new HelloWorldProducer(), false);
+        // thread(new HelloWorldConsumer(), false);
+        // thread(new HelloWorldConsumer(), false);
+        // hread(new HelloWorldProducer(), false);
+        // thread(new HelloWorldConsumer(), false);
+        // hread(new HelloWorldProducer(), false);
+        // thread(new HelloWorldConsumer(), false);
+        // hread(new HelloWorldProducer(), false);
+        // thread(new HelloWorldConsumer(), false);
+        // thread(new HelloWorldConsumer(), false);
+        // hread(new HelloWorldProducer(), false);
     }
 
     public static void thread(Runnable runnable, boolean daemon) {
@@ -54,11 +45,13 @@ public class App {
         brokerThread.start();
     }
 
+
     public static class HelloWorldProducer implements Runnable {
+        Destination replys;
         public void run() {
             try {
                 // Create a ConnectionFactory
-                ActiveMQConnectionFactory connectionFactory = new ActiveMQConnectionFactory("vm://localhost");
+                ActiveMQConnectionFactory connectionFactory = new ActiveMQConnectionFactory("tcp://localhost:61616");
 
                 // Create a Connection
                 Connection connection = connectionFactory.createConnection();
@@ -68,7 +61,9 @@ public class App {
                 Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
 
                 // Create the destination (Topic or Queue)
-                Destination destination = session.createQueue("TEST.FOO");
+                Destination destination = session.createQueue("TEST");
+                replys = session.createTemporaryQueue();
+
 
                 // Create a MessageProducer from the Session to the Topic or Queue
                 MessageProducer producer = session.createProducer(destination);
@@ -77,11 +72,17 @@ public class App {
                 // Create a messages
                 String text = "Hello world! From: " + Thread.currentThread().getName() + " : " + this.hashCode();
                 TextMessage message = session.createTextMessage(text);
-
+                message.setJMSReplyTo(replys);
+                message.setJMSCorrelationID("correlationid");
+                message.setIntProperty("token", 1234567);
                 // Tell the producer to send the message
                 System.out.println("Sent message: "+ message.hashCode() + " : " + Thread.currentThread().getName());
                 producer.send(message);
-
+                MessageConsumer consumer = session.createConsumer(replys);
+                Message response = consumer.receive(1000);
+                int newToken = response.getIntProperty("token");
+                String ci = response.getJMSCorrelationID();
+                String txtResponse = ((TextMessage)response).getText();
                 // Clean up
                 session.close();
                 connection.close();
@@ -98,7 +99,7 @@ public class App {
             try {
 
                 // Create a ConnectionFactory
-                ActiveMQConnectionFactory connectionFactory = new ActiveMQConnectionFactory("vm://localhost");
+                ActiveMQConnectionFactory connectionFactory = new ActiveMQConnectionFactory("tcp://localhost:61616");
 
                 // Create a Connection
                 Connection connection = connectionFactory.createConnection();
@@ -110,20 +111,31 @@ public class App {
                 Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
 
                 // Create the destination (Topic or Queue)
-                Destination destination = session.createQueue("TEST.FOO");
+                Destination destination = session.createQueue("TEST");
 
                 // Create a MessageConsumer from the Session to the Topic or Queue
                 MessageConsumer consumer = session.createConsumer(destination);
 
                 // Wait for a message
                 Message message = consumer.receive(1000);
-
-                if (message instanceof TextMessage) {
-                    TextMessage textMessage = (TextMessage) message;
+                int token =  message.getIntProperty("token");
+                String correlationId = message.getJMSCorrelationID();
+                Destination replyTo = message.getJMSReplyTo();
+                MessageProducer producer = session.createProducer(null);
+                producer.setDeliveryMode(DeliveryMode.NON_PERSISTENT);
+                String msg = "OK Then" + Thread.currentThread().getName() + " : " + this.hashCode();
+                TextMessage responseMessage = session.createTextMessage(msg);
+                responseMessage.setJMSCorrelationID(correlationId);
+                responseMessage.setIntProperty("token", token+1);
+                producer.send(replyTo, responseMessage);
+                if (message instanceof TextMessage textMessage) {
                     String text = textMessage.getText();
                     System.out.println("Received: " + text);
-                } else {
+                } else if(message != null){
                     System.out.println("Received: " + message);
+                    String sp = message.getStringProperty("SP");
+                    byte[] data = message.getBody(byte[].class);
+                    byte[] x  = data;
                 }
 
                 consumer.close();
