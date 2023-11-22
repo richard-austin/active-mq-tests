@@ -1,10 +1,8 @@
 package org.example;
 
 import org.apache.activemq.ActiveMQConnectionFactory;
-import org.apache.activemq.AdvisoryConsumer;
 import org.apache.activemq.advisory.AdvisorySupport;
 import org.apache.activemq.command.*;
-import org.apache.activemq.schema.core.DtoInboundTopicBridge;
 
 import javax.jms.*;
 import javax.jms.Message;
@@ -79,8 +77,7 @@ public class App {
                     ActiveMQMessage aMsg = (ActiveMQMessage)msg;
                     DataStructure dataStructure = aMsg.getDataStructure();
                     if(dataStructure instanceof ProducerInfo) {
-                        ProducerInfo prod = (ProducerInfo)dataStructure;
-                        Object obj = prod;
+                        Object obj = (ProducerInfo)dataStructure;
                     }
                     else if(dataStructure instanceof ConsumerInfo) {
                         ConsumerInfo cons = (ConsumerInfo) aMsg.getDataStructure();
