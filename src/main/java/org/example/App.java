@@ -19,7 +19,7 @@ public class App {
 
         // thread(new HelloWorldProducer(), false);
 
-        Thread.sleep(2000);
+       // Thread.sleep(1000);
         // thread(new HelloWorldConsumer(), false);
         // hread(new HelloWorldProducer(), false);
         // thread(new HelloWorldConsumer(), false);
@@ -132,7 +132,7 @@ public class App {
                 producer.send(message);
                 MessageConsumer consumer = session.createConsumer(replys);
                 consumer.setMessageListener(this);
-                Thread.sleep(1000);
+               Thread.sleep(100);
                 session.close();
                 connection.close();
             }
@@ -218,9 +218,9 @@ public class App {
                 }
 
 
-               // consumer.close();
+                consumer.close();
                 //Thread.sleep(1000);
-              //  session.close();
+                session.close();
                 connection.close();
             }
             catch(Exception ex) {
