@@ -1,8 +1,13 @@
 package org.example;
 
 import org.apache.activemq.ActiveMQConnectionFactory;
+import org.apache.activemq.AdvisoryConsumer;
+import org.apache.activemq.advisory.AdvisorySupport;
+import org.apache.activemq.command.*;
+import org.apache.activemq.schema.core.DtoInboundTopicBridge;
 
 import javax.jms.*;
+import javax.jms.Message;
 
 /**
  * Hello world!
@@ -11,21 +16,23 @@ public class App {
 
     public static void main(String[] args) throws Exception {
         thread(new HelloWorldProducer(), false);
-        // thread(new HelloWorldProducer(), false);
         thread(new HelloWorldConsumer(), false);
-        Thread.sleep(1000);
+
+
+        // thread(new HelloWorldProducer(), false);
+
+        Thread.sleep(2000);
         // thread(new HelloWorldConsumer(), false);
         // hread(new HelloWorldProducer(), false);
         // thread(new HelloWorldConsumer(), false);
         // hread(new HelloWorldProducer(), false);
-        Thread.sleep(1000);
         // thread(new HelloWorldConsumer(), false);
         // hread(new HelloWorldProducer(), false);
         // thread(new HelloWorldConsumer(), false);
         // thread(new HelloWorldConsumer(), false);
         // hread(new HelloWorldProducer(), false);
         // hread(new HelloWorldProducer(), false);
-        Thread.sleep(1000);
+
         // hread(new HelloWorldProducer(), false);
         // thread(new HelloWorldConsumer(), false);
         // thread(new HelloWorldConsumer(), false);
@@ -45,8 +52,55 @@ public class App {
         brokerThread.start();
     }
 
+    public static class AdvisoryMonitor implements MessageListener {
+        Session session;
+        Destination destination;
+        AdvisoryMonitor(Session session, Destination destination) {
+            this.session = session;
+            this.destination = destination;
+            setup();
+        }
+        Destination advisoryDestination;
+        MessageConsumer consumer;
+        private void setup() {
+            try {
+                advisoryDestination = AdvisorySupport.getConsumerAdvisoryTopic(destination);
+                consumer = session.createConsumer(advisoryDestination);
+                consumer.setMessageListener(this);
+            }
+            catch(JMSException ex) {
+             System.out.println("Exception: "+ex.getMessage());
+            }
+        }
 
-    public static class HelloWorldProducer implements Runnable {
+        public void onMessage(Message msg){
+            if(msg instanceof ActiveMQMessage) {
+                try {
+                    ActiveMQMessage aMsg = (ActiveMQMessage)msg;
+                    DataStructure dataStructure = aMsg.getDataStructure();
+                    if(dataStructure instanceof ProducerInfo) {
+                        ProducerInfo prod = (ProducerInfo)dataStructure;
+                        Object obj = prod;
+                    }
+                    else if(dataStructure instanceof ConsumerInfo) {
+                        ConsumerInfo cons = (ConsumerInfo) aMsg.getDataStructure();
+                        System.out.println("ConsumerInfo Message received: consumerCount = " + aMsg.getIntProperty("consumerCount"));
+                    }
+                    else if(dataStructure instanceof RemoveInfo) {
+                        RemoveInfo ri = (RemoveInfo) dataStructure;
+                        System.out.println("RemoveInfo Message received: consumerCount = " + aMsg.getIntProperty("consumerCount"));
+                    }
+                }
+                catch(Exception e) {
+                  //  log.error("Failed to process message: " + msg);
+                }
+            }
+            else
+                System.out.println("Something else");
+        }
+    }
+
+    public static class HelloWorldProducer implements Runnable,  MessageListener  {
         Destination replys;
         public void run() {
             try {
@@ -62,6 +116,7 @@ public class App {
 
                 // Create the destination (Topic or Queue)
                 Destination destination = session.createQueue("TEST");
+                AdvisoryMonitor am = new AdvisoryMonitor(session, destination);
                 replys = session.createTemporaryQueue();
 
 
@@ -79,11 +134,8 @@ public class App {
                 System.out.println("Sent message: "+ message.hashCode() + " : " + Thread.currentThread().getName());
                 producer.send(message);
                 MessageConsumer consumer = session.createConsumer(replys);
-                Message response = consumer.receive(1000);
-                int newToken = response.getIntProperty("token");
-                String ci = response.getJMSCorrelationID();
-                String txtResponse = ((TextMessage)response).getText();
-                // Clean up
+                consumer.setMessageListener(this);
+                Thread.sleep(1000);
                 session.close();
                 connection.close();
             }
@@ -92,9 +144,27 @@ public class App {
                 e.printStackTrace();
             }
         }
+
+        @Override
+        public void onMessage(Message response) {
+            try {
+                int newToken = response.getIntProperty("token");
+                String ci = response.getJMSCorrelationID();
+                String txtResponse = ((TextMessage) response).getText();
+                String x = txtResponse;
+                System.out.println("Received: newToken = "+newToken+": correlationID = "+ci+" txtReponse ="+txtResponse);
+            }
+            catch(JMSException ex) {
+                System.out.println(ex.getMessage());
+            }
+
+        }
     }
 
-    public static class HelloWorldConsumer implements Runnable, ExceptionListener {
+    static Session session;
+    static MessageConsumer consumer;
+    static Connection connection;
+    public static class HelloWorldConsumer implements Runnable, ExceptionListener, MessageListener {
         public void run() {
             try {
 
@@ -102,45 +172,22 @@ public class App {
                 ActiveMQConnectionFactory connectionFactory = new ActiveMQConnectionFactory("tcp://localhost:61616");
 
                 // Create a Connection
-                Connection connection = connectionFactory.createConnection();
+                connection = connectionFactory.createConnection();
                 connection.start();
 
                 connection.setExceptionListener(this);
 
                 // Create a Session
-                Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
+                session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
 
                 // Create the destination (Topic or Queue)
                 Destination destination = session.createQueue("TEST");
 
                 // Create a MessageConsumer from the Session to the Topic or Queue
-                MessageConsumer consumer = session.createConsumer(destination);
-
+                consumer = session.createConsumer(destination);
+                consumer.setMessageListener(this);
                 // Wait for a message
-                Message message = consumer.receive(1000);
-                int token =  message.getIntProperty("token");
-                String correlationId = message.getJMSCorrelationID();
-                Destination replyTo = message.getJMSReplyTo();
-                MessageProducer producer = session.createProducer(null);
-                producer.setDeliveryMode(DeliveryMode.NON_PERSISTENT);
-                String msg = "OK Then" + Thread.currentThread().getName() + " : " + this.hashCode();
-                TextMessage responseMessage = session.createTextMessage(msg);
-                responseMessage.setJMSCorrelationID(correlationId);
-                responseMessage.setIntProperty("token", token+1);
-                producer.send(replyTo, responseMessage);
-                if (message instanceof TextMessage textMessage) {
-                    String text = textMessage.getText();
-                    System.out.println("Received: " + text);
-                } else if(message != null){
-                    System.out.println("Received: " + message);
-                    String sp = message.getStringProperty("SP");
-                    byte[] data = message.getBody(byte[].class);
-                    byte[] x  = data;
-                }
-
-                consumer.close();
-                session.close();
-                connection.close();
+               // Message message = consumer.receive(1000);
             } catch (Exception e) {
                 System.out.println("Caught: " + e);
                 e.printStackTrace();
@@ -149,6 +196,40 @@ public class App {
 
         public synchronized void onException(JMSException ex) {
             System.out.println("JMS Exception occured.  Shutting down client.");
+        }
+
+        @Override
+        public void onMessage(Message message) {
+            try {
+                int token = message.getIntProperty("token");
+                String correlationId = message.getJMSCorrelationID();
+                Destination replyTo = message.getJMSReplyTo();
+                MessageProducer producer = session.createProducer(null);
+                producer.setDeliveryMode(DeliveryMode.NON_PERSISTENT);
+                String msg = "OK Then: " + Thread.currentThread().getName() + " : " + this.hashCode();
+                TextMessage responseMessage = session.createTextMessage(msg);
+                responseMessage.setJMSCorrelationID(correlationId);
+                responseMessage.setIntProperty("token", token + 1);
+                producer.send(replyTo, responseMessage);
+                if (message instanceof TextMessage textMessage) {
+                    String text = textMessage.getText();
+                    System.out.println("Received text message: " + text);
+                } else if (message != null) {
+                    System.out.println("Received: " + message);
+                    byte[] data = message.getBody(byte[].class);
+                    byte[] x = data;
+                }
+
+
+               // consumer.close();
+                //Thread.sleep(1000);
+              //  session.close();
+                connection.close();
+            }
+            catch(Exception ex) {
+                System.out.println(ex.getMessage());
+            }
+
         }
     }
 }
