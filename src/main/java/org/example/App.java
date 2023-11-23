@@ -1,6 +1,7 @@
 package org.example;
 
-import org.apache.activemq.ActiveMQConnectionFactory;
+import org.apache.activemq.ActiveMQSslConnectionFactory;
+//import org.apache.activemq.ActiveMQConnectionFactory;
 import org.apache.activemq.advisory.AdvisorySupport;
 import org.apache.activemq.command.*;
 
@@ -102,18 +103,22 @@ public class App {
         public void run() {
             try {
                 // Create a ConnectionFactory
-                ActiveMQConnectionFactory connectionFactory = new ActiveMQConnectionFactory("tcp://localhost:61616");
-
+                ActiveMQSslConnectionFactory connectionFactory = new ActiveMQSslConnectionFactory("failover://ssl://localhost:61617?socket.verifyHostName=false");
+                connectionFactory.setKeyStore("/home/richard/client.ks");
+                connectionFactory.setKeyStoreKeyPassword("password");
+                connectionFactory.setTrustStore("/home/richard/client.ts");
+                connectionFactory.setTrustStorePassword("password");
                 // Create a Connection
                 Connection connection = connectionFactory.createConnection();
                 connection.start();
 
+
                 // Create a Session
                 Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
-
                 // Create the destination (Topic or Queue)
                 Destination destination = session.createQueue("TEST");
                 AdvisoryMonitor am = new AdvisoryMonitor(session, destination);
+              //  Thread.sleep(1200000);
                 replys = session.createTemporaryQueue();
 
 
@@ -166,7 +171,11 @@ public class App {
             try {
 
                 // Create a ConnectionFactory
-                ActiveMQConnectionFactory connectionFactory = new ActiveMQConnectionFactory("tcp://localhost:61616");
+                ActiveMQSslConnectionFactory connectionFactory = new ActiveMQSslConnectionFactory("failover://ssl://localhost:61617?socket.verifyHostName=false");
+                connectionFactory.setKeyStore("/home/richard/client.ks");
+                connectionFactory.setKeyStoreKeyPassword("password");
+                connectionFactory.setTrustStore("/home/richard/client.ts");
+                connectionFactory.setTrustStorePassword("password");
 
                 // Create a Connection
                 connection = connectionFactory.createConnection();
